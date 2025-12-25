@@ -11,7 +11,7 @@ import simd
 @MainActor
 class FingerTracker {
 
-    private let lineWidth: Float = 0.005
+    private let lineWidth: Float = 0.002
     private let minTraceDistance: Float = 0
     private let touchMargin: Float = 0.02
 
@@ -88,7 +88,7 @@ class FingerTracker {
         let pts = ptsWithTime.map { $0.0 }
         let localPts = pts.map { entity.convert(position: $0, from: nil) }
         let mesh = createTubeMesh(from: localPts, radius: lineWidth/2, radialSegments: 16)
-        let yellowMaterial = UnlitMaterial(color: UIColor(red: 1, green: 1, blue: 0, alpha: 1))
+        let yellowMaterial = UnlitMaterial(color: UIColor(red: 1, green: 1, blue: 0, alpha: 0.6))
 
         if traceLineEntities[segmentIndex].parent != nil {
             traceLineEntities[segmentIndex].removeFromParent()

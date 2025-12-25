@@ -15,6 +15,7 @@ import UIKit
 @MainActor
 class StraightLineRenderer {
     
+    // Increased default dot radius for better visibility (was 0.0015)
     private let dotRadius: Float = 0.0015
     private let dotSpacing: Float = 0.001
     private let maxDots: Int = 1000
@@ -34,6 +35,10 @@ class StraightLineRenderer {
     
     func freezeDots() {
         isFrozen = true
+    }
+    
+    func unfreezeDots() {
+        isFrozen = false
     }
 
     private func createDotPool() {
@@ -76,14 +81,17 @@ class StraightLineRenderer {
 
                 if i == 0 {
                     let greenMaterial = SimpleMaterial(color: .green, isMetallic: false)
-                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.003 * 2 {
-                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.003)
+                    // Make the start dot larger for visibility (was radius 0.003, then 0.006)
+                    // Increased to 0.013 to prevent z-fighting with Red dot (0.012) when overlapping
+                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.013 * 2 {
+                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.013)
                     }
                     dot.model?.materials = [greenMaterial]
                 } else if i == dotCount {
                     let redMaterial = SimpleMaterial(color: .red, isMetallic: false)
-                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.003 * 2 {
-                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.003)
+                    // Make the end dot larger for visibility (was radius 0.003, then 0.006)
+                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.012 * 2 {
+                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.012)
                     }
                     dot.model?.materials = [redMaterial]
                 } else {

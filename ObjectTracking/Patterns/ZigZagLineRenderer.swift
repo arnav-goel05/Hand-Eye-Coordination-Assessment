@@ -31,6 +31,10 @@ class ZigZagLineRenderer {
         isFrozen = true
     }
 
+    func unfreezeDots() {
+        isFrozen = false
+    }
+
     private func createDotPool() {
         let sphereMesh = MeshResource.generateSphere(radius: dotRadius)
         let sphereMaterial = SimpleMaterial(
@@ -102,8 +106,8 @@ class ZigZagLineRenderer {
                 dot.isEnabled = true
                 if i == 0 {
                     let greenMaterial = SimpleMaterial(color: .green, isMetallic: false)
-                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.003 * 2 {
-                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.003)
+                    if let mesh = dot.model?.mesh, mesh.bounds.extents.x != 0.013 * 2 {
+                        dot.model?.mesh = MeshResource.generateSphere(radius: 0.013)
                     }
                     dot.model?.materials = [greenMaterial]
                 } else if i == zigZagPoints.count - 1 {

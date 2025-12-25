@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import simd
 
 enum Step {
     case straight1
@@ -72,6 +73,43 @@ class DataManager: ObservableObject {
     @Published var currentStep: Step = .straight1
     @Published var currentAttempt: Int = 1
     @Published var stepDidChange: Bool = false
+    @Published var assessmentCompleted: Bool = false
+    @Published var isFingerStable: Bool = false
+    @Published var isFingerBeingTracked: Bool = false
+    @Published var isFingerTooFar: Bool = false
+    @Published var stabilityCountdown: Int = 2
+    @Published var isTracing: Bool = false
+    @Published var tracingStabilityCountdown: Int = 2
+    @Published var isShowingCompletionCountdown: Bool = false
+    @Published var isFingerTooCloseForFinish: Bool = false
+    @Published var isAnimationComplete: Bool = false // When tracing, finger must move forward past maxStartingDistance to finish
+    @Published var forceStartTracing: Bool = false // Force start tracing without stability wait
+    @Published var forceStopTracing: Bool = false // Force stop tracing and proceed to next step
+    @Published var isShowingStepComplete: Bool = false  // Show checkmark after completing a step
+    @Published var stepCompleteProgress: Double = 0.0   // Progress for checkmark animation
+    
+    // Calibration states
+    @Published var calibrationPhase: CalibrationPhase = .waitingForHead
+    @Published var leftHandDetected: Bool = false
+    @Published var rightHandDetected: Bool = false
+    @Published var calibrationCountdown: Int = 2
+    @Published var calibrationProgress: Double = 0.0  // 0.0 to 1.0 for circular progress animation
+    @Published var checkmarkProgress: Double = 0.0    // 0.0 to 1.0 for checkmark drawing animation
+    @Published var calibrationComplete: Bool = false
+    @Published var selectedHand: HandSide? = nil
+    
+    enum CalibrationPhase {
+        case waitingForHead          // "Please keep your head in front of the headset..."
+        case waitingForOneHand       // Waiting for user to show one hand
+        case holdingSteady           // "I can see your [hand], hold it ahead for 3 seconds"
+        case countingDown            // Counting down from 3 to 1
+        case complete                // Calibration finished, proceed to assessment
+    }
+    
+    enum HandSide {
+        case left
+        case right
+    }
 
     // Store all attempts for each step
     @Published var straight1Attempts: [TraceAttempt] = []
@@ -121,10 +159,14 @@ class DataManager: ObservableObject {
     }
     
     func saveCurrentAttempt() {
+        let userTrace = getUserTrace(for: currentStep)
+        print("💾 Saving attempt \(currentAttempt) for step \(currentStep)")
+        print("💾 User trace has \(userTrace.count) points")
+        
         let attempt = TraceAttempt(
             attemptNumber: currentAttempt,
             timestamp: Date(),
-            userTrace: getUserTrace(for: currentStep),
+            userTrace: userTrace,
             headsetPosition: getHeadsetPosition(for: currentStep),
             objectPosition: getObjectPosition(for: currentStep),
             totalTraceLength: totalTraceLength,
@@ -133,12 +175,24 @@ class DataManager: ObservableObject {
         )
         
         switch currentStep {
-        case .straight1: straight1Attempts.append(attempt)
-        case .straight2: straight2Attempts.append(attempt)
-        case .straight3: straight3Attempts.append(attempt)
-        case .straight4: straight4Attempts.append(attempt)
-        case .zigzagBeginner: zigzagBeginnerAttempts.append(attempt)
-        case .zigzagAdvanced: zigzagAdvancedAttempts.append(attempt)
+        case .straight1: 
+            straight1Attempts.append(attempt)
+            print("💾 Straight1 now has \(straight1Attempts.count) attempts")
+        case .straight2: 
+            straight2Attempts.append(attempt)
+            print("💾 Straight2 now has \(straight2Attempts.count) attempts")
+        case .straight3: 
+            straight3Attempts.append(attempt)
+            print("💾 Straight3 now has \(straight3Attempts.count) attempts")
+        case .straight4: 
+            straight4Attempts.append(attempt)
+            print("💾 Straight4 now has \(straight4Attempts.count) attempts")
+        case .zigzagBeginner: 
+            zigzagBeginnerAttempts.append(attempt)
+            print("💾 ZigzagBeginner now has \(zigzagBeginnerAttempts.count) attempts")
+        case .zigzagAdvanced: 
+            zigzagAdvancedAttempts.append(attempt)
+            print("💾 ZigzagAdvanced now has \(zigzagAdvancedAttempts.count) attempts")
         }
         
         // Move to next attempt or next step
@@ -275,4 +329,86 @@ class DataManager: ObservableObject {
         case .zigzagAdvanced: return "ZigzagAdvanced"
         }
     }
+    
+    // Export data for a specific step
+    func exportStepDataToCSV(for step: Step) -> String {
+        var rows: [String] = ["task,path_type,attempt_number,point_idx,timestamp,x,y,z"]
+        
+        let taskName = getStepName(step)
+        
+        // Add guide dots first (if positions are available)
+        let guideDots = getGuideDots(for: step)
+        for (i, point) in guideDots.enumerated() {
+            rows.append("\(taskName),guide,,\(i),,\(point.x),\(point.y),\(point.z)")
+        }
+        
+        // Add all user attempts for this step
+        let attempts = getAttempts(for: step)
+        for attempt in attempts {
+            for (i, point) in attempt.userTrace.enumerated() {
+                rows.append("\(taskName),user,\(attempt.attemptNumber),\(i),\(point.timestamp),\(point.x),\(point.y),\(point.z)")
+            }
+        }
+        
+        return rows.joined(separator: "\n")
+    }
+    
+    private func getGuideDots(for step: Step) -> [SIMD3<Float>] {
+        guard let start = getHeadsetPosition(for: step),
+              let end = getObjectPosition(for: step) else {
+            return []
+        }
+        
+        switch step {
+        case .zigzagBeginner:
+            return generateZigZagGuideDots(start: start, end: end, amplitude: 0.05, frequency: 2)
+        case .zigzagAdvanced:
+            return generateZigZagGuideDots(start: start, end: end, amplitude: 0.05, frequency: 4)
+        default:
+            return generateStraightLineGuideDots(start: start, end: end)
+        }
+    }
+    
+    private func generateStraightLineGuideDots(start: SIMD3<Float>, end: SIMD3<Float>) -> [SIMD3<Float>] {
+        let dotSpacing: Float = 0.001
+        let maxDots = 1000
+        let lineVector = end - start
+        let lineLength = length(lineVector)
+        if lineLength == 0 {
+            return [start]
+        }
+        let direction = normalize(lineVector)
+        let numberOfSegments = min(Int(lineLength / dotSpacing), maxDots)
+        var dots: [SIMD3<Float>] = []
+        for i in 0...numberOfSegments {
+            let t = Float(i) / Float(numberOfSegments)
+            let point = start + direction * (lineLength * t)
+            dots.append(point)
+        }
+        return dots
+    }
+    
+    private func generateZigZagGuideDots(start: SIMD3<Float>, end: SIMD3<Float>, amplitude: Float, frequency: Int, dotSpacing: Float = 0.001, maxDots: Int = 1000) -> [SIMD3<Float>] {
+        let lineVector = end - start
+        let lineLength = length(lineVector)
+        if lineLength == 0 {
+            return [start]
+        }
+        let direction = normalize(lineVector)
+        let numberOfSegments = min(Int(lineLength / dotSpacing), maxDots)
+        
+        let up: SIMD3<Float> = abs(direction.y) < 0.99 ? [0, 1, 0] : [1, 0, 0]
+        let right = normalize(cross(direction, up))
+        
+        var dots: [SIMD3<Float>] = []
+        for i in 0...numberOfSegments {
+            let t = Float(i) / Float(numberOfSegments)
+            let basePoint = start + direction * (lineLength * t)
+            let angle = t * Float(frequency) * 2.0 * .pi
+            let offset = right * sin(angle) * amplitude
+            dots.append(basePoint + offset)
+        }
+        return dots
+    }
 }
+

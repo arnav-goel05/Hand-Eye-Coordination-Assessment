@@ -30,7 +30,7 @@ class AppState {
     var worldSensingAuthorizationStatus = ARKitSession.AuthorizationStatus.notDetermined
     
     var allRequiredAuthorizationsAreGranted: Bool {
-        worldSensingAuthorizationStatus == .allowed
+        true
     }
 
     var canEnterImmersiveSpace: Bool {

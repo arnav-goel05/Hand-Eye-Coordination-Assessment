@@ -21,6 +21,10 @@
 	</array>
 	<key>NSWorldSensingUsageDescription</key>
 	<string>Scan your environment to detect objects</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

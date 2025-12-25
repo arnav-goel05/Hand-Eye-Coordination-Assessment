@@ -25,6 +25,8 @@ struct ObjectTrackingApp: App {
             )
         }
         .windowStyle(.plain)
+        .defaultSize(width: 160, height: 80)
+        .windowResizability(.contentSize)
         .environmentObject(dataManager)
 
         ImmersiveSpace(id: UIIdentifier.immersiveSpace) {

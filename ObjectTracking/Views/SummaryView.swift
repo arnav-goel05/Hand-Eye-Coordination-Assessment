@@ -37,31 +37,18 @@ struct SummaryView: View {
     }
 
     var body: some View {
-        VStack(spacing: 50) {
-            Text("Overall Summary")
-                .titleTextStyle()
-
-            if SummaryType.allCases.contains(where: { type in
-                switch type {
-                case .straight1, .straight2, .straight3, .straight4:
-                    return headsetPos(for: type) != nil && objectPos(for: type) != nil
-                default:
-                    return false
-                }
-            }) {
-                Button("Export All Data") {
-                    exportAllData()
-                }
-                .buttonTextStyle()
-            }
+        VStack {
+            Text("Thank You")
+                .font(.system(size: 48, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
         }
-        .fileExporter(
-            isPresented: $isExportingCSV,
-            document: csvURL.map { URLDocument(fileURL: $0) },
-            contentType: .commaSeparatedText,
-            defaultFilename: "StraightGuideDots"
-        ) { result in
-            csvURL = nil
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.5), value: true)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.08, green: 0.08, blue: 0.08))
+        .onAppear {
+            // Automatically export all data when summary view appears
+            exportAllDataToDocuments()
         }
        }
 
@@ -251,6 +238,67 @@ struct SummaryView: View {
             csvURL = fileURL
             isExportingCSV = true
         } catch {
+        }
+    }
+    
+    private func exportAllDataToDocuments() {
+        var rows: [String] = ["task,path_type,attempt_number,point_idx,timestamp,x,y,z"]
+
+        func appendGuide(task: String, points: [SIMD3<Float>]) {
+            for (i, p) in points.enumerated() {
+                rows.append("\(task),guide,,\(i),,\(p.x),\(p.y),\(p.z)")
+            }
+        }
+
+        func appendUserAttempt(task: String, attemptNumber: Int, trace: [TraceAttempt.TrackedPoint]) {
+            for (i, point) in trace.enumerated() {
+                rows.append("\(task),user,\(attemptNumber),\(i),\(point.timestamp),\(point.x),\(point.y),\(point.z)")
+            }
+        }
+        
+        // Process all task types
+        let allTaskTypes: [SummaryType] = [.straight1, .straight2, .straight3, .straight4, .zigzagBeginner, .zigzagAdvanced]
+        
+        for taskType in allTaskTypes {
+            let taskName = taskType.rawValueFilenamePrefix
+            
+            // Add guide dots first
+            if let start = headsetPos(for: taskType), let end = objectPos(for: taskType) {
+                let guideDots: [SIMD3<Float>]
+                
+                switch taskType {
+                case .zigzagBeginner:
+                    guideDots = generateZigZagGuideDots(start: start, end: end, amplitude: 0.05, frequency: 2)
+                case .zigzagAdvanced:
+                    guideDots = generateZigZagGuideDots(start: start, end: end, amplitude: 0.05, frequency: 4)
+                default:
+                    guideDots = generateStraightLineGuideDots(start: start, end: end)
+                }
+                
+                appendGuide(task: taskName, points: guideDots)
+            }
+            
+            // Add all user attempts (1-10) for this task
+            let attempts = dataManager.getAttempts(for: stepFromSummaryType(taskType))
+            for attempt in attempts {
+                appendUserAttempt(task: taskName, attemptNumber: attempt.attemptNumber, trace: attempt.userTrace)
+            }
+        }
+
+        let csv = rows.joined(separator: "\n")
+        guard rows.count > 1 else { return }
+
+        do {
+            // Save to Documents directory for easy access via Files app
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let timestamp = DateFormatter.iso8601.string(from: Date())
+            let filename = "HandEyeCoordinationData_\(timestamp).csv"
+            let fileURL = documentsPath.appendingPathComponent(filename)
+            
+            try csv.write(to: fileURL, atomically: true, encoding: .utf8)
+            print("Data successfully exported to Documents: \(fileURL.path)")
+        } catch {
+            print("Error exporting data to Documents: \(error)")
         }
     }
     

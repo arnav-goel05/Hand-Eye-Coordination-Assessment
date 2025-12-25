@@ -10,6 +10,7 @@
 		393E4AB02A9629A7005C9691 /* Entity+ObjectTracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 393E4AAF2A9629A7005C9691 /* Entity+ObjectTracking.swift */; };
 		394D18CF2A960EB9009E3A2E /* ObjectTrackingApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394D18CE2A960EB9009E3A2E /* ObjectTrackingApp.swift */; };
 		396786C62B766C54007A056F /* ObjectAnchorVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396786C52B766C44007A056F /* ObjectAnchorVisualization.swift */; };
+		A72ABB132EAE9A0F006F7737 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A72ABB122EAE930C006F7737 /* Assets.xcassets */; };
 		A72DB5A22E31D247002CA225 /* Cocoa.referenceobject in Sources */ = {isa = PBXBuildFile; fileRef = A72DB5A12E31D247002CA225 /* Cocoa.referenceobject */; };
 		A73A6D692E50DA9A00370A1A /* Soy sauce.referenceobject in Sources */ = {isa = PBXBuildFile; fileRef = A73A6D682E50DA9A00370A1A /* Soy sauce.referenceobject */; };
 		A77B24CA2E36190600C4C891 /* Styles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77B24C92E36190600C4C891 /* Styles.swift */; };
@@ -29,6 +30,7 @@
 		8B0AF4152C3DC91B0076F08A /* LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 		8B0AF4162C3EEDDA0076F08A /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		A6D7F03CD75409349B2BFF2D /* SampleCode.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
+		A72ABB122EAE930C006F7737 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A72DB5A12E31D247002CA225 /* Cocoa.referenceobject */ = {isa = PBXFileReference; lastKnownFileType = file.referenceobject; path = Cocoa.referenceobject; sourceTree = "<group>"; };
 		A73A6D682E50DA9A00370A1A /* Soy sauce.referenceobject */ = {isa = PBXFileReference; lastKnownFileType = file.referenceobject; path = "Soy sauce.referenceobject"; sourceTree = "<group>"; };
 		A77B24C92E36190600C4C891 /* Styles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Styles.swift; sourceTree = "<group>"; };
@@ -77,6 +79,7 @@
 				394D18C82A960EB9009E3A2E /* Products */,
 				BA828D328595146A23B0FCD1 /* Configuration */,
 				011ADA283792D14163C617DE /* LICENSE */,
+				A72ABB122EAE930C006F7737 /* Assets.xcassets */,
 			);
 			sourceTree = "<group>";
 		};
@@ -131,6 +134,7 @@
 			);
 			path = Views;
 			sourceTree = "<group>";
+			usesTabs = 0;
 		};
 		EBF0DF0E2AEFFDB900ABF63C /* App */ = {
 			isa = PBXGroup;
@@ -215,6 +219,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A72ABB132EAE9A0F006F7737 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -367,8 +372,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A6D7F03CD75409349B2BFF2D /* SampleCode.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BlackIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -379,7 +385,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ObjectTracking/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Object Tracking";
+				INFOPLIST_KEY_CFBundleDisplayName = "Finger Nose Assessment";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -395,7 +401,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 2.0;
+				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
@@ -403,8 +409,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A6D7F03CD75409349B2BFF2D /* SampleCode.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BlackIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -415,7 +422,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ObjectTracking/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Object Tracking";
+				INFOPLIST_KEY_CFBundleDisplayName = "Finger Nose Assessment";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -431,7 +438,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 2.0;
+				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};

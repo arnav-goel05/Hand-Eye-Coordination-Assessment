@@ -20,8 +20,8 @@ class ObjectAnchorVisualization {
     private var distanceObject: Double = 0.0
     private var lastTextUpdateTime: TimeInterval = 0.0
     
-    private let headsetYOffset: Float = -0.15
-    private let headsetForwardOffset: Float = 0.35
+    private let headsetYOffset: Float = -0.125
+    private let headsetForwardOffset: Float = 0.3
 
     private let worldInfo: WorldTrackingProvider
     private let dataManager: DataManager
@@ -45,6 +45,17 @@ class ObjectAnchorVisualization {
     private var isTracing: Bool = false
     
     var virtualPoint: SIMD3<Float>
+    
+    // Animation state
+    private var animationStartTime: TimeInterval?
+    private var currentAnimationStep: Step?
+    
+    // Animation state
+    public private(set) var isAnimationComplete: Bool = false
+    
+    // Cache for last valid positions to prevent jumping
+    private var lastValidHeadsetPos: SIMD3<Float>?
+    private var lastValidObjectPos: SIMD3<Float>?
     
     /// Returns a point a bit ahead of the headset, with vertical offset, given a Transform.
     private func headsetVirtualPosition(from pose: Transform) -> SIMD3<Float> {
@@ -75,10 +86,58 @@ class ObjectAnchorVisualization {
         switch step {
         case .zigzagBeginner, .zigzagAdvanced:
             // Lower the start dot for zigzag tasks
-            return SIMD3(base.x, base.y - 0.1, base.z) // 10cm lower
+            return SIMD3(base.x, base.y - 0.05, base.z) // 10cm lower
         default:
             // Keep original position for straight line tasks
             return base
+        }
+    }
+    
+    private func getLinePositions(devicePose: DeviceAnchor, virtualPoint: SIMD3<Float>) -> (SIMD3<Float>, SIMD3<Float>) {
+        // Check if we have stored finger-based positions
+        let storedHeadsetPos: SIMD3<Float>?
+        let storedObjectPos: SIMD3<Float>?
+        
+        switch dataManager.currentStep {
+        case .straight1:
+            storedHeadsetPos = dataManager.straight1HeadsetPosition
+            storedObjectPos = dataManager.straight1ObjectPosition
+        case .straight2:
+            storedHeadsetPos = dataManager.straight2HeadsetPosition
+            storedObjectPos = dataManager.straight2ObjectPosition
+        case .straight3:
+            storedHeadsetPos = dataManager.straight3HeadsetPosition
+            storedObjectPos = dataManager.straight3ObjectPosition
+        case .straight4:
+            storedHeadsetPos = dataManager.straight4HeadsetPosition
+            storedObjectPos = dataManager.straight4ObjectPosition
+        case .zigzagBeginner:
+            storedHeadsetPos = dataManager.zigzagBeginnerHeadsetPosition
+            storedObjectPos = dataManager.zigzagBeginnerObjectPosition
+        case .zigzagAdvanced:
+            storedHeadsetPos = dataManager.zigzagAdvancedHeadsetPosition
+            storedObjectPos = dataManager.zigzagAdvancedObjectPosition
+        }
+        
+        // If we have stored positions (from finger stability), use them
+        if let headsetPos = storedHeadsetPos, let objectPos = storedObjectPos {
+            // Update cache
+            lastValidHeadsetPos = headsetPos
+            lastValidObjectPos = objectPos
+            // print("Using stored positions: Headset \(headsetPos), Object \(objectPos)")
+            return (headsetPos, objectPos)
+        } else if let cachedHeadset = lastValidHeadsetPos, let cachedObject = lastValidObjectPos {
+            // Fallback to cache if DataManager is temporarily nil
+            print("⚠️ DataManager positions nil, using cached positions to prevent jump.")
+            return (cachedHeadset, cachedObject)
+        } else {
+            print("⚠️ Falling back to dynamic calculation! StoredHeadset: \(String(describing: storedHeadsetPos)), StoredObject: \(String(describing: storedObjectPos))")
+            // Otherwise, use original calculation method
+            let pose = Transform(matrix: devicePose.originFromAnchorTransform)
+            let headsetPos = headsetVirtualPosition(from: pose)
+            let objectPos = adjustedObjectPosition(for: dataManager.currentStep, base: virtualPoint)
+            let adjustedHeadsetPos = adjustedHeadsetPosition(for: dataManager.currentStep, base: headsetPos)
+            return (adjustedHeadsetPos, objectPos)
         }
     }
     
@@ -86,7 +145,8 @@ class ObjectAnchorVisualization {
     init(
         using worldInfo: WorldTrackingProvider,
         dataManager: DataManager,
-        virtualPoint: SIMD3<Float>
+        virtualPoint: SIMD3<Float>,
+        fingerTracker: FingerTracker
     ) {
         self.worldInfo = worldInfo
         self.dataManager = dataManager
@@ -94,6 +154,7 @@ class ObjectAnchorVisualization {
         
         let root = Entity()
         root.transform = Transform() // Identity transform at origin
+        root.isEnabled = false // Start with visualizations hidden
         self.entity = root
         
         self.straightLineRenderer1 = StraightLineRenderer(parentEntity: root)
@@ -102,10 +163,7 @@ class ObjectAnchorVisualization {
         self.straightLineRenderer4 = StraightLineRenderer(parentEntity: root)
         self.zigZagLineRendererBeginner = ZigZagLineRenderer(parentEntity: root)
         self.zigZagLineRendererAdvanced = ZigZagLineRenderer(parentEntity: root)
-        self.fingerTracker = FingerTracker(
-            parentEntity: root,
-            objectExtents: [0.1, 0.1, 0.1]
-        )
+        self.fingerTracker = fingerTracker
         self.distanceCalculator = DistanceCalculator(worldInfo: worldInfo)
         
        // createWindowPane()
@@ -159,43 +217,152 @@ class ObjectAnchorVisualization {
         }
     }
     
+    func unfreezeAllDots() {
+        straightLineRenderer1.unfreezeDots()
+        straightLineRenderer2.unfreezeDots()
+        straightLineRenderer3.unfreezeDots()
+        straightLineRenderer4.unfreezeDots()
+        zigZagLineRendererBeginner.unfreezeDots()
+        zigZagLineRendererAdvanced.unfreezeDots()
+    }
+    
+    func showVisualizations() {
+        // Make the entity visible
+        entity.isEnabled = true
+        
+        // Force an update to position the line with stored finger-based positions
+        if let devicePose = worldInfo.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) {
+            let offset = SIMD3<Float>(0, -0.20, -0.6)
+            let pose = Transform(matrix: devicePose.originFromAnchorTransform)
+            let worldPos = SIMD3<Float>(pose.translation.x + offset.x, 
+                                      pose.translation.y + offset.y, 
+                                      pose.translation.z + offset.z)
+            update(virtualPoint: worldPos)
+        }
+        
+        // Show the dots for the current step
+        hideAllButCurrentStepDots()
+        
+        // Show initial instructions
+        showInitialInstructions()
+    }
+    
+    func hideVisualizations() {
+        // Hide all dots and make entity invisible
+        straightLineRenderer1.hideAllDots()
+        straightLineRenderer2.hideAllDots()
+        straightLineRenderer3.hideAllDots()
+        straightLineRenderer4.hideAllDots()
+        zigZagLineRendererBeginner.hideAllDots()
+        zigZagLineRendererAdvanced.hideAllDots()
+        
+        // Hide instructions as well
+        hideStartInstruction()
+        hideEndInstruction()
+        
+        // Make the entire entity invisible
+        entity.isEnabled = false
+    }
+    
     func update(virtualPoint newVirtualPoint: SIMD3<Float>) {
+        
+        // Only update if entity is enabled (i.e., visualizations should be shown)
+        guard entity.isEnabled else { return }
         
         hideAllButCurrentStepDots()
         
         virtualPoint = newVirtualPoint
         
         // Update instruction positions to follow the moving dots
-        updateInstructionPositions()
+
         
         guard let devicePose = worldInfo.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
-            switch dataManager.currentStep {
-            case .straight1:
-                straightLineRenderer1.hideAllDots()
-            case .straight2:
-                straightLineRenderer2.hideAllDots()
-            case .straight3:
-                straightLineRenderer3.hideAllDots()
-            case .straight4:
-                straightLineRenderer4.hideAllDots()
-            case .zigzagBeginner:
-                zigZagLineRendererBeginner.hideAllDots()
-            case .zigzagAdvanced:
-                zigZagLineRendererAdvanced.hideAllDots()
+            // ARKit tracking lost - don't hide dots for attempts 2+, just return
+            if dataManager.currentAttempt > 1 {
+                // Keep dots visible even when tracking is lost
+                switch dataManager.currentStep {
+                case .straight1:
+                    straightLineRenderer1.showAllDots()
+                case .straight2:
+                    straightLineRenderer2.showAllDots()
+                case .straight3:
+                    straightLineRenderer3.showAllDots()
+                case .straight4:
+                    straightLineRenderer4.showAllDots()
+                case .zigzagBeginner:
+                    zigZagLineRendererBeginner.showAllDots()
+                case .zigzagAdvanced:
+                    zigZagLineRendererAdvanced.showAllDots()
+                }
+            } else {
+                // First attempt: hide dots when tracking is lost
+                switch dataManager.currentStep {
+                case .straight1:
+                    straightLineRenderer1.hideAllDots()
+                case .straight2:
+                    straightLineRenderer2.hideAllDots()
+                case .straight3:
+                    straightLineRenderer3.hideAllDots()
+                case .straight4:
+                    straightLineRenderer4.hideAllDots()
+                case .zigzagBeginner:
+                    zigZagLineRendererBeginner.hideAllDots()
+                case .zigzagAdvanced:
+                    zigZagLineRendererAdvanced.hideAllDots()
+                }
             }
             return
         }
         
         let pose = Transform(matrix: devicePose.originFromAnchorTransform)
-        let headsetPos = headsetVirtualPosition(from: pose)
-        let objectPos = adjustedObjectPosition(for: dataManager.currentStep, base: virtualPoint)
-        let adjustedHeadsetPos = adjustedHeadsetPosition(for: dataManager.currentStep, base: headsetPos)
+        
+        // Use stored positions from finger-based calculation if available, otherwise use original logic
+        let (adjustedHeadsetPos, objectPos) = getLinePositions(devicePose: devicePose, virtualPoint: virtualPoint)
         
         // Move headsetPos and objectPos closer to each other by t
         let t1: Float = 0
         let t2: Float = 0
         let closerHeadsetPos = simd_mix(adjustedHeadsetPos, objectPos, SIMD3<Float>(repeating: t1))
-        let closerObjectPos = simd_mix(objectPos, adjustedHeadsetPos, SIMD3<Float>(repeating: t2))
+        var closerObjectPos = simd_mix(objectPos, adjustedHeadsetPos, SIMD3<Float>(repeating: t2))
+        
+        // ANIMATION LOGIC:
+        
+        // ANIMATION LOGIC:
+        
+        if isTracing {
+            // FORWARD ANIMATION (Slide Out)
+            
+            // Start or continue animation
+            if animationStartTime == nil {
+                 animationStartTime = CACurrentMediaTime()
+                 isAnimationComplete = false
+            }
+            
+            if let startTime = animationStartTime {
+                let now = CACurrentMediaTime()
+                let duration: TimeInterval = 10.0
+                let elapsed = now - startTime
+                
+                if elapsed < duration {
+                    // Calculate progress (0.0 to 1.0) with ease-out curve
+                    let rawProgress = Float(elapsed / duration)
+                    let progress = 1.0 - pow(1.0 - rawProgress, 3) // Cubic ease-out
+                    
+                    // Interpolate position: Start at Green Dot, end at Red Dot
+                    closerObjectPos = simd_mix(closerHeadsetPos, closerObjectPos, SIMD3<Float>(repeating: progress))
+                    isAnimationComplete = false
+                } else {
+                    // Animation complete
+                    isAnimationComplete = true
+                }
+                // If elapsed >= duration, closerObjectPos is already at the target (progress = 1.0)
+            }
+        } else {
+            // Not tracing - collapse the line so only the start dot is visible
+            animationStartTime = nil
+            isAnimationComplete = false
+            closerObjectPos = closerHeadsetPos
+        }
         
         switch dataManager.currentStep {
         case .straight1:
@@ -239,23 +406,13 @@ class ObjectAnchorVisualization {
                 frequency: 4
             )
         }
+        
+        
+        // Update instruction positions to follow the moving dots (do this AFTER updating dots)
+        updateInstructionPositions()
     }
     
     func startTracing() {
-        switch dataManager.currentStep {
-        case .straight1:
-            straightLineRenderer1.freezeDots()
-        case .straight2:
-            straightLineRenderer2.freezeDots()
-        case .straight3:
-            straightLineRenderer3.freezeDots()
-        case .straight4:
-            straightLineRenderer4.freezeDots()
-        case .zigzagBeginner:
-            zigZagLineRendererBeginner.freezeDots()
-        case .zigzagAdvanced:
-            zigZagLineRendererAdvanced.freezeDots()
-        }
         fingerTracker.startTracing()
         isTracing = true
         
@@ -275,39 +432,7 @@ class ObjectAnchorVisualization {
         let stepType = dataManager.currentStep
         // userTrace now stores tuples of (position, timestamp)
         let userTrace: [(SIMD3<Float>, TimeInterval)] = fingerTracker.getTimedTracePoints()
-        if let devicePose = worldInfo.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) {
-            let pose = Transform(matrix: devicePose.originFromAnchorTransform)
-            let headsetPos = headsetVirtualPosition(from: pose)
-            
-            let objectPos = adjustedObjectPosition(for: stepType, base: virtualPoint)
-            let adjustedHeadsetPos = adjustedHeadsetPosition(for: stepType, base: headsetPos)
-
-            let t1: Float = 0
-            let t2: Float = 0
-            let closerHeadsetPos = simd_mix(adjustedHeadsetPos, objectPos, SIMD3<Float>(repeating: t1))
-            let closerObjectPos = simd_mix(objectPos, adjustedHeadsetPos, SIMD3<Float>(repeating: t2))
-            
-            switch stepType {
-            case .straight1:
-                dataManager.straight1HeadsetPosition = closerHeadsetPos
-                dataManager.straight1ObjectPosition = closerObjectPos
-            case .straight2:
-                dataManager.straight2HeadsetPosition = closerHeadsetPos
-                dataManager.straight2ObjectPosition = closerObjectPos
-            case .straight3:
-                dataManager.straight3HeadsetPosition = closerHeadsetPos
-                dataManager.straight3ObjectPosition = closerObjectPos
-            case .straight4:
-                dataManager.straight4HeadsetPosition = closerHeadsetPos
-                dataManager.straight4ObjectPosition = closerObjectPos
-            case .zigzagBeginner:
-                dataManager.zigzagBeginnerHeadsetPosition = closerHeadsetPos
-                dataManager.zigzagBeginnerObjectPosition = closerObjectPos
-            case .zigzagAdvanced:
-                dataManager.zigzagAdvancedHeadsetPosition = closerHeadsetPos
-                dataManager.zigzagAdvancedObjectPosition = closerObjectPos
-            }
-        }
+        
         dataManager.setUserTrace(userTrace, for: stepType)
        // updateInstructionText()
     }
@@ -331,7 +456,7 @@ class ObjectAnchorVisualization {
         )
     }
     
-    func isFingerNearFirstDot(_ fingerWorldPos: SIMD3<Float>, threshold: Float = 0.005) -> Bool {
+    func isFingerNearFirstDot(_ fingerWorldPos: SIMD3<Float>, threshold: Float = 0.0075) -> Bool {
         let firstDotWorldPos: SIMD3<Float>?
         switch dataManager.currentStep {
         case .straight1:
@@ -351,7 +476,7 @@ class ObjectAnchorVisualization {
         return simd_distance(fingerWorldPos, firstDot) < threshold
     }
     
-    func isFingerNearLastDot(_ fingerWorldPos: SIMD3<Float>, threshold: Float = 0.005) -> Bool {
+    func isFingerNearLastDot(_ fingerWorldPos: SIMD3<Float>, threshold: Float = 0.0075) -> Bool {
         let lastDotWorldPos: SIMD3<Float>?
         switch dataManager.currentStep {
         case .straight1:
@@ -423,7 +548,7 @@ class ObjectAnchorVisualization {
             let t1: Float = 0
             let t2: Float = 0
             let closerHeadsetPos = simd_mix(headsetPos, objectPos, SIMD3<Float>(repeating: t1))
-            let closerObjectPos = simd_mix(objectPos, headsetPos, SIMD3<Float>(repeating: t2))
+            var closerObjectPos = simd_mix(objectPos, headsetPos, SIMD3<Float>(repeating: t2))
             
             return distanceCalculator.distanceFromFingerToLine(
                 fingerWorldPos: fingerWorldPos,
@@ -449,6 +574,7 @@ class ObjectAnchorVisualization {
             zigZagLineRendererAdvanced.hideAllDots()
         }
         fingerTracker.clearTrace()
+        fingerTracker.stopTracing()
         isTracing = false
         
         // Hide all instructions when resetting
@@ -487,7 +613,7 @@ class ObjectAnchorVisualization {
         let textMesh = MeshResource.generateText(
             text,
             extrusionDepth: 0.0005,
-            font: .systemFont(ofSize: 0.01, weight: .medium), // Smaller font size
+            font: .systemFont(ofSize: 0.01, weight: .black), // Changed to black weight for maximum boldness
             containerFrame: CGRect(x: 0, y: 0, width: 150, height: 30),
             alignment: .center
         )
@@ -523,7 +649,7 @@ class ObjectAnchorVisualization {
         }
         
         let instructionWindow = createInstructionWindow(
-            text: "Start tracing from the green dot.",
+            text: "Starting point",
             textColor: .systemGreen
         )
         
@@ -554,7 +680,7 @@ class ObjectAnchorVisualization {
         }
         
         let instructionWindow = createInstructionWindow(
-            text: "Trace until the red dot.",
+            text: "Ending point",
             textColor: .systemRed
         )
         
